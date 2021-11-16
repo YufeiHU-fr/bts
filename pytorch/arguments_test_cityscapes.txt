@@ -1,0 +1,9 @@
+--encoder resnet50_bts
+--data_path ../../dataset/nyu_depth_v2/official_splits/test/
+--dataset cityscapes
+--filenames_file ../train_test_inputs/cityscapesdepthv2_val_files_with_gt.txt
+--model_name bts_cityscapes_pytorch
+--checkpoint_path ./models/
+--input_height 480
+--input_width 640
+--max_depth 10
