@@ -422,9 +422,11 @@ def main_worker(gpu, ngpus_per_node, args):
     num_log_images = args.batch_size
     end_learning_rate = args.end_learning_rate if args.end_learning_rate != -1 else 0.1 * args.learning_rate
 
-    var_sum = [var.sum() for var in model.parameters() if var.requires_grad]
+    var_sum = [var.data.cpu().numpy().sum() for var in model.parameters() if var.requires_grad]
     var_cnt = len(var_sum)
-    var_sum = np.sum(var_sum)
+    #print(type(var_sum[0]))
+    #exit()
+    var_sum = np.sum(np.array(var_sum))
 
     print("Initial variables' sum: {:.3f}, avg: {:.3f}".format(var_sum, var_sum/var_cnt))
 
@@ -467,7 +469,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
             duration += time.time() - before_op_time
             if global_step and global_step % args.log_freq == 0 and not model_just_loaded:
-                var_sum = [var.sum() for var in model.parameters() if var.requires_grad]
+                var_sum = [var.data.cpu().numpy().sum() for var in model.parameters() if var.requires_grad]
                 var_cnt = len(var_sum)
                 var_sum = np.sum(var_sum)
                 examples_per_sec = args.batch_size / duration * args.log_freq
@@ -561,7 +563,7 @@ def main():
     model_filename = args.model_name + '.py'
     command = 'mkdir ' + args.log_directory + '/' + args.model_name
     os.system(command)
-
+    
     args_out_path = args.log_directory + '/' + args.model_name + '/' + sys.argv[1]
     command = 'cp ' + sys.argv[1] + ' ' + args_out_path
     os.system(command)

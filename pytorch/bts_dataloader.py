@@ -451,11 +451,14 @@ if __name__=="__main__":
     denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     for i, input in enumerate(dataloader.data):
         result = input['depth'].squeeze().detach().cpu().numpy()
+        #print(result.shape)
+        #exit()
         result = (denorm(result) * 255).transpose(1, 2, 0).astype(np.uint8)
         result = np.clip(result,0,255)
         Image.fromarray(result).save(os.path.join('./visualization', '{}-img_depth.jpg'.format(i)))
         print(i+1)
         print(input['image'].shape)
+        print(input['focal'])
         exit()
     #import tqdm
     #for _, eval_sample_batched in enumerate(tqdm(dataloader.data)):
