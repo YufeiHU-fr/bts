@@ -96,7 +96,14 @@ class DataLoadPreprocess(Dataset):
     
     def __getitem__(self, idx):
         sample_path = self.filenames[idx]
-        if self.args.dataset != 'cityscapes':
+        if self.args.dataset == 'cityscapes':
+            camera_path = sample_path.split()[2]
+            json_camera = open(camera_path)
+            data_camera = json.load(json_camera)
+            baseline = data_camera['extrinsic']['baseline']
+            focal = (data_camera['intrinsic']['fx']+data_camera['intrinsic']['fy'])/2.
+            json_camera.close()
+        else:
             focal = float(sample_path.split()[2])
 
         if self.mode == 'train':
@@ -111,18 +118,11 @@ class DataLoadPreprocess(Dataset):
                 depth_path = os.path.join(self.args.gt_path, "./" + sample_path.split()[1])
 
             if self.args.dataset=='cityscapes':
-                camera_path = sample_path.split()[2]
-                json_camera = open(camera_path)
-                data_camera = json.load(json_camera)
-                baseline = data_camera['extrinsic']['baseline']
-                focal_ = (data_camera['intrinsic']['fx']+data_camera['intrinsic']['fy'])/2.
-                json_camera.close()
-
                 image = Image.open(image_path)
                 depth_gt = cv2.imread(depth_path,cv2.IMREAD_UNCHANGED).astype(np.float16)
                 depth_gt[depth_gt > 0]= (depth_gt[depth_gt > 0] - 1) / 256
                 gt_height, gt_width = depth_gt.shape
-                depth_gt = (float(baseline) * float(focal_)) / depth_gt
+                depth_gt = (float(baseline) * float(focal)) / depth_gt
                 depth_gt[depth_gt == np.inf] = 0
                 depth_gt = depth_gt.astype(np.uint8)
                 depth_gt = Image.fromarray(depth_gt)
@@ -170,7 +170,6 @@ class DataLoadPreprocess(Dataset):
                 data_path = self.args.data_path
             if self.args.dataset == 'cityscapes':
                 image_path = sample_path.split()[0]
-
                 image = np.asarray(Image.open(image_path), dtype=np.float32) / 255.0
             else:
                 image_path = os.path.join(data_path, "./" + sample_path.split()[0])
@@ -179,20 +178,14 @@ class DataLoadPreprocess(Dataset):
             if self.mode == 'online_eval':
                 if self.args.dataset == 'cityscapes':
                     depth_path = sample_path.split()[1]
-                    camera_path = sample_path.split()[2]
-                    json_camera = open(camera_path)
-                    data_camera = json.load(json_camera)
-                    baseline = data_camera['extrinsic']['baseline']
-                    focal_ = (data_camera['intrinsic']['fx'] + data_camera['intrinsic']['fy']) / 2.
-                    json_camera.close()
                     depth_gt = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float16)
                     depth_gt[depth_gt > 0] = (depth_gt[depth_gt > 0] - 1) / 256
                     gt_height, gt_width = depth_gt.shape
-                    depth_gt = (float(baseline) * float(focal_)) / depth_gt
+                    depth_gt = (float(baseline) * float(focal)) / depth_gt
                     depth_gt[depth_gt == np.inf] = 0
                     depth_gt = depth_gt.astype(np.uint8)
                     depth_gt = Image.fromarray(depth_gt)
-                    has_valid_depth = False
+                    has_valid_depth = True
                 else:
                     gt_path = self.args.gt_path_eval
                     depth_path = os.path.join(gt_path, "./" + sample_path.split()[1])
@@ -209,6 +202,8 @@ class DataLoadPreprocess(Dataset):
                     depth_gt = np.expand_dims(depth_gt, axis=2)
                     if self.args.dataset == 'nyu':
                         depth_gt = depth_gt / 1000.0
+                    elif self.args.dataset=='cityscapes':
+                        depth_gt=depth_gt
                     else:
                         depth_gt = depth_gt / 256.0
 
@@ -222,13 +217,15 @@ class DataLoadPreprocess(Dataset):
                     depth_gt = depth_gt[top_margin:top_margin + 352, left_margin:left_margin + 1216, :]
             
             if self.mode == 'online_eval':
+                has_valid_depth=True
                 sample = {'image': image, 'depth': depth_gt, 'focal': focal, 'has_valid_depth': has_valid_depth}
             else:
                 sample = {'image': image, 'focal': focal}
         
         if self.transform:
             sample = self.transform(sample)
-        
+       
+        #print(sample)
         return sample
     
     def rotate_image(self, image, angle, flag=Image.BILINEAR):
@@ -447,8 +444,19 @@ if __name__=="__main__":
                 continue
             vars()[key] = val
 
-
-    dataloader =  BtsDataLoader(args, 'train')
-    print(dataloader.__len__())
-    for i, input in enumerate(dataloader):
-        print(input)
+    args.distributed = False
+    dataloader =  BtsDataLoader(args, 'online_eval')
+    print(len(dataloader.data))
+    import utils
+    denorm = utils.Denormalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    for i, input in enumerate(dataloader.data):
+        result = input['depth'].squeeze().detach().cpu().numpy()
+        result = (denorm(result) * 255).transpose(1, 2, 0).astype(np.uint8)
+        result = np.clip(result,0,255)
+        Image.fromarray(result).save(os.path.join('./visualization', '{}-img_depth.jpg'.format(i)))
+        print(i+1)
+        print(input['image'].shape)
+        exit()
+    #import tqdm
+    #for _, eval_sample_batched in enumerate(tqdm(dataloader.data)):
+    #    print(eval_sample_batched)
