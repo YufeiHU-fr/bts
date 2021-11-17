@@ -450,6 +450,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
             if args.dataset == 'nyu':
                 mask = depth_gt > 0.1
+            elif args.dataset=='cityscapes':
+                mask = depth_gt > 0.001
             else:
                 mask = depth_gt > 1.0
 

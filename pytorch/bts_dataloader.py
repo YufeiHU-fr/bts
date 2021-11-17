@@ -126,11 +126,13 @@ class DataLoadPreprocess(Dataset):
                 depth_gt[depth_gt == np.inf] = 0
                 depth_gt = depth_gt.astype(np.uint8)
                 depth_gt = Image.fromarray(depth_gt)
+                self.args.do_kb_crop=False
             else:
                 image = Image.open(image_path)
                 depth_gt = Image.open(depth_path)
             
             if self.args.do_kb_crop is True:
+                print('train crop')
                 height = image.height
                 width = image.width
                 top_margin = int(height - 352)
@@ -186,6 +188,7 @@ class DataLoadPreprocess(Dataset):
                     depth_gt = depth_gt.astype(np.uint8)
                     depth_gt = Image.fromarray(depth_gt)
                     has_valid_depth = True
+                    self.args.do_kb_crop=False
                 else:
                     gt_path = self.args.gt_path_eval
                     depth_path = os.path.join(gt_path, "./" + sample_path.split()[1])
@@ -208,6 +211,7 @@ class DataLoadPreprocess(Dataset):
                         depth_gt = depth_gt / 256.0
 
             if self.args.do_kb_crop is True:
+                print('crop')
                 height = image.shape[0]
                 width = image.shape[1]
                 top_margin = int(height - 352)
