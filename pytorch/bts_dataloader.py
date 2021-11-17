@@ -179,12 +179,12 @@ class DataLoadPreprocess(Dataset):
                 if self.args.dataset == 'cityscapes':
                     depth_path = sample_path.split()[1]
                     depth_gt = cv2.imread(depth_path, cv2.IMREAD_UNCHANGED).astype(np.float16)
-                    depth_gt[depth_gt > 0] = (depth_gt[depth_gt > 0] - 1) / 256
-                    gt_height, gt_width = depth_gt.shape
-                    depth_gt = (float(baseline) * float(focal)) / depth_gt
-                    depth_gt[depth_gt == np.inf] = 0
-                    depth_gt = depth_gt.astype(np.uint8)
-                    depth_gt = Image.fromarray(depth_gt)
+                    #depth_gt[depth_gt > 0] = (depth_gt[depth_gt > 0] - 1) / 256
+                    #gt_height, gt_width = depth_gt.shape
+                    #depth_gt = (float(baseline) * float(focal)) / depth_gt
+                    #depth_gt[depth_gt == np.inf] = 0
+                    #depth_gt = depth_gt.astype(np.uint8)
+                    #depth_gt = Image.fromarray(depth_gt)
                     has_valid_depth = True
                 else:
                     gt_path = self.args.gt_path_eval
