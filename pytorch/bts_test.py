@@ -32,6 +32,7 @@ import errno
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+from bts import BtsModel
 from bts_dataloader import *
 
 
@@ -98,12 +99,12 @@ def test(params):
     print("Total number of parameters: {}".format(num_params))
 
     num_test_samples = get_num_lines(args.filenames_file)
-
+    
     with open(args.filenames_file) as f:
         lines = f.readlines()
 
     print('now testing {} files with {}'.format(num_test_samples, args.checkpoint_path))
-
+    #exit()
     pred_depths = []
     pred_8x8s = []
     pred_4x4s = []
@@ -126,7 +127,7 @@ def test(params):
     elapsed_time = time.time() - start_time
     print('Elapesed time: %s' % str(elapsed_time))
     print('Done.')
-    
+    #exit()
     save_name = 'result_' + args.model_name
     
     print('Saving result pngs..')
@@ -154,21 +155,21 @@ def test(params):
             filename_cmap_png = save_name + '/cmap/' + lines[s].split()[0].split('/')[-1].replace('.jpg', '.png')
             filename_image_png = save_name + '/rgb/' + lines[s].split()[0].split('/')[-1]
         else:
-            scene_name = lines[s].split()[0].split('/')[0]
-            filename_pred_png = save_name + '/raw/' + scene_name + '_' + lines[s].split()[0].split('/')[1].replace(
+            scene_name = lines[s].split()[0].split('/')[-2]
+            filename_pred_png = save_name + '/raw/' + scene_name + '_' + lines[s].split()[0].split('/')[-1].replace(
                 '.jpg', '.png')
-            filename_cmap_png = save_name + '/cmap/' + scene_name + '_' + lines[s].split()[0].split('/')[1].replace(
+            filename_cmap_png = save_name + '/cmap/' + scene_name + '_' + lines[s].split()[0].split('/')[-1].replace(
                 '.jpg', '.png')
-            filename_gt_png = save_name + '/gt/' + scene_name + '_' + lines[s].split()[0].split('/')[1].replace(
+            filename_gt_png = save_name + '/gt/' + scene_name + '_' + lines[s].split()[0].split('/')[-1].replace(
                 '.jpg', '.png')
-            filename_image_png = save_name + '/rgb/' + scene_name + '_' + lines[s].split()[0].split('/')[1]
+            filename_image_png = save_name + '/rgb/' + scene_name + '_' + lines[s].split()[0].split('/')[-1]
         
-        rgb_path = os.path.join(args.data_path, './' + lines[s].split()[0])
-        image = cv2.imread(rgb_path)
-        if args.dataset == 'nyu':
-            gt_path = os.path.join(args.data_path, './' + lines[s].split()[1])
-            gt = cv2.imread(gt_path, -1).astype(np.float32) / 1000.0  # Visualization purpose only
-            gt[gt == 0] = np.amax(gt)
+       # rgb_path = os.path.join(args.data_path, './' + lines[s].split()[0])
+       # image = cv2.imread(rgb_path)
+       # if args.dataset == 'nyu':
+       #     gt_path = os.path.join(args.data_path, './' + lines[s].split()[1])
+       #     gt = cv2.imread(gt_path, -1).astype(np.float32) / 1000.0  # Visualization purpose only
+       #     gt[gt == 0] = np.amax(gt)
         
         pred_depth = pred_depths[s]
         pred_8x8 = pred_8x8s[s]
@@ -177,6 +178,8 @@ def test(params):
         pred_1x1 = pred_1x1s[s]
         
         if args.dataset == 'kitti' or args.dataset == 'kitti_benchmark':
+            pred_depth_scaled = pred_depth * 256.0
+        elif args.dataset == 'cityscapes':
             pred_depth_scaled = pred_depth * 256.0
         else:
             pred_depth_scaled = pred_depth * 1000.0
