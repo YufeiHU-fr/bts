@@ -164,8 +164,8 @@ def test(params):
                 '.jpg', '.png')
             filename_image_png = save_name + '/rgb/' + scene_name + '_' + lines[s].split()[0].split('/')[-1]
         
-       # rgb_path = os.path.join(args.data_path, './' + lines[s].split()[0])
-       # image = cv2.imread(rgb_path)
+        rgb_path = lines[s].split()[0]
+        image = cv2.imread(rgb_path)
        # if args.dataset == 'nyu':
        #     gt_path = os.path.join(args.data_path, './' + lines[s].split()[1])
        #     gt = cv2.imread(gt_path, -1).astype(np.float32) / 1000.0  # Visualization purpose only
@@ -180,7 +180,7 @@ def test(params):
         if args.dataset == 'kitti' or args.dataset == 'kitti_benchmark':
             pred_depth_scaled = pred_depth * 256.0
         elif args.dataset == 'cityscapes':
-            pred_depth_scaled = pred_depth * 256.0
+            pred_depth_scaled = pred_depth * 1000.0
         else:
             pred_depth_scaled = pred_depth * 1000.0
         
