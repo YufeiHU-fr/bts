@@ -37,6 +37,7 @@ from tqdm import tqdm
 
 from bts import BtsModel
 from bts_dataloader import *
+import network
 
 
 def convert_arg_line_to_args(arg_line):
@@ -54,6 +55,11 @@ parser.add_argument('--model_name',                type=str,   help='model name'
 parser.add_argument('--encoder',                   type=str,   help='type of encoder, desenet121_bts, densenet161_bts, '
                                                                     'resnet101_bts, resnet50_bts, resnext50_bts or resnext101_bts',
                                                                default='densenet161_bts')
+parser.add_argument('--model',                     type=str,   help='deeplabv3plus or bts', default='bts')
+parser.add_argument("--model_backbone",                     type=str, default='deeplabv3plus_resnet50',
+                                                            choices=['deeplabv3_resnet50',  'deeplabv3plus_resnet50',
+                                                                     'deeplabv3_resnet101', 'deeplabv3plus_resnet101',
+                                                                     'deeplabv3_mobilenet', 'deeplabv3plus_mobilenet'], help='model name')
 # Dataset
 parser.add_argument('--dataset',                   type=str,   help='dataset to train on, kitti or nyu', default='nyu')
 parser.add_argument('--data_path',                 type=str,   help='path to the data', required=True)
@@ -259,7 +265,10 @@ def online_eval(model, dataloader_eval, gpu, ngpus):
                 # print('Invalid depth. continue.')
                 continue
 
-            _, _, _, _, pred_depth = model(image, focal)
+            if args.model == 'bts':
+                _, _, _, _, pred_depth = model(image, focal)
+            else:
+               pred_depth = model(image)
 
             pred_depth = pred_depth.cpu().numpy().squeeze()
             gt_depth = gt_depth.cpu().numpy().squeeze()
@@ -333,16 +342,31 @@ def main_worker(gpu, ngpus_per_node, args):
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url, world_size=args.world_size, rank=args.rank)
 
     # Create model
-    model = BtsModel(args)
+    if args.model =='bts':
+        model = BtsModel(args)
+    else:
+        model_map = {
+            'deeplabv3_resnet50': network.deeplabv3_resnet50,
+            'deeplabv3plus_resnet50': network.deeplabv3plus_resnet50,
+            'deeplabv3_resnet101': network.deeplabv3_resnet101,
+            'deeplabv3plus_resnet101': network.deeplabv3plus_resnet101,
+            'deeplabv3_mobilenet': network.deeplabv3_mobilenet,
+            'deeplabv3plus_mobilenet': network.deeplabv3plus_mobilenet
+        }
+        model = model_map[args.model_backbone](num_classes=1, output_stride=8,pretrained_backbone=False)
+        print('load deeplabv3plus as the CNN model for the depth estimation\n')
+
+
     model.train()
-    model.decoder.apply(weights_init_xavier)
-    set_misc(model)
+    if args.model == 'bts':
+        model.decoder.apply(weights_init_xavier)
+        set_misc(model)
 
-    num_params = sum([np.prod(p.size()) for p in model.parameters()])
-    print("Total number of parameters: {}".format(num_params))
+        num_params = sum([np.prod(p.size()) for p in model.parameters()])
+        print("Total number of parameters: {}".format(num_params))
 
-    num_params_update = sum([np.prod(p.shape) for p in model.parameters() if p.requires_grad])
-    print("Total number of learning parameters: {}".format(num_params_update))
+        num_params_update = sum([np.prod(p.shape) for p in model.parameters() if p.requires_grad])
+        print("Total number of learning parameters: {}".format(num_params_update))
 
     if args.distributed:
         if args.gpu is not None:
@@ -374,27 +398,41 @@ def main_worker(gpu, ngpus_per_node, args):
 
     model_just_loaded = False
     if args.checkpoint_path != '':
-        if os.path.isfile(args.checkpoint_path):
-            print("Loading checkpoint '{}'".format(args.checkpoint_path))
-            if args.gpu is None:
-                checkpoint = torch.load(args.checkpoint_path)
-            else:
-                loc = 'cuda:{}'.format(args.gpu)
-                checkpoint = torch.load(args.checkpoint_path, map_location=loc)
-            global_step = checkpoint['global_step']
-            model.load_state_dict(checkpoint['model'])
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            try:
-                best_eval_measures_higher_better = checkpoint['best_eval_measures_higher_better'].cpu()
-                best_eval_measures_lower_better = checkpoint['best_eval_measures_lower_better'].cpu()
-                best_eval_steps = checkpoint['best_eval_steps']
-            except KeyError:
-                print("Could not load values for online evaluation")
+        if args.model == 'bts':
+            if os.path.isfile(args.checkpoint_path):
+                print("Loading checkpoint '{}'".format(args.checkpoint_path))
+                if args.gpu is None:
+                    checkpoint = torch.load(args.checkpoint_path)
+                else:
+                    loc = 'cuda:{}'.format(args.gpu)
+                    checkpoint = torch.load(args.checkpoint_path, map_location=loc)
+                global_step = checkpoint['global_step']
+                model.load_state_dict(checkpoint['model'])
+                optimizer.load_state_dict(checkpoint['optimizer'])
+                try:
+                    best_eval_measures_higher_better = checkpoint['best_eval_measures_higher_better'].cpu()
+                    best_eval_measures_lower_better = checkpoint['best_eval_measures_lower_better'].cpu()
+                    best_eval_steps = checkpoint['best_eval_steps']
+                except KeyError:
+                    print("Could not load values for online evaluation")
 
-            print("Loaded checkpoint '{}' (global_step {})".format(args.checkpoint_path, checkpoint['global_step']))
+                print("Loaded checkpoint '{}' (global_step {})".format(args.checkpoint_path, checkpoint['global_step']))
+            else:
+                print("No checkpoint found at '{}'".format(args.checkpoint_path))
+            model_just_loaded = True
         else:
-            print("No checkpoint found at '{}'".format(args.checkpoint_path))
-        model_just_loaded = True
+            model_dict = model.state_dict()
+            checkpoint = torch.load(args.checkpoint_path)
+            state_dict = checkpoint["model_state"]
+            state_dict.popitem()
+            state_dict.popitem()
+            for k, v in state_dict.items():
+                print(k)
+            # exit()
+            model_dict.update(state_dict)
+            model.load_state_dict(model_dict)
+            print('successfully loaded the checkpoint OBoW_pretrained_deeplabv3plus_autoencoder.pth ')
+
 
     if args.retrain:
         global_step = 0
@@ -446,7 +484,10 @@ def main_worker(gpu, ngpus_per_node, args):
             focal = torch.autograd.Variable(sample_batched['focal'].cuda(args.gpu, non_blocking=True))
             depth_gt = torch.autograd.Variable(sample_batched['depth'].cuda(args.gpu, non_blocking=True))
 
-            lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = model(image, focal)
+            if args.model == 'bts':
+                lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = model(image, focal)
+            else:
+                depth_est = model(image)
 
             if args.dataset == 'nyu':
                 mask = depth_gt > 0.1
@@ -483,21 +524,22 @@ def main_worker(gpu, ngpus_per_node, args):
                 print_string = 'GPU: {} | examples/s: {:4.2f} | loss: {:.5f} | var sum: {:.3f} avg: {:.3f} | time elapsed: {:.2f}h | time left: {:.2f}h'
                 print(print_string.format(args.gpu, examples_per_sec, loss, var_sum.item(), var_sum.item()/var_cnt, time_sofar, training_time_left))
 
-                if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                                                            and args.rank % ngpus_per_node == 0):
-                    writer.add_scalar('silog_loss', loss, global_step)
-                    writer.add_scalar('learning_rate', current_lr, global_step)
-                    writer.add_scalar('var average', var_sum.item()/var_cnt, global_step)
-                    depth_gt = torch.where(depth_gt < 1e-3, depth_gt * 0 + 1e3, depth_gt)
-                    for i in range(num_log_images):
-                        writer.add_image('depth_gt/image/{}'.format(i), normalize_result(1/depth_gt[i, :, :, :].data), global_step)
-                        writer.add_image('depth_est/image/{}'.format(i), normalize_result(1/depth_est[i, :, :, :].data), global_step)
-                        writer.add_image('reduc1x1/image/{}'.format(i), normalize_result(1/reduc1x1[i, :, :, :].data), global_step)
-                        writer.add_image('lpg2x2/image/{}'.format(i), normalize_result(1/lpg2x2[i, :, :, :].data), global_step)
-                        writer.add_image('lpg4x4/image/{}'.format(i), normalize_result(1/lpg4x4[i, :, :, :].data), global_step)
-                        writer.add_image('lpg8x8/image/{}'.format(i), normalize_result(1/lpg8x8[i, :, :, :].data), global_step)
-                        writer.add_image('image/image/{}'.format(i), inv_normalize(image[i, :, :, :]).data, global_step)
-                    writer.flush()
+                if args.model == 'bts':
+                    if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                                                                and args.rank % ngpus_per_node == 0):
+                        writer.add_scalar('silog_loss', loss, global_step)
+                        writer.add_scalar('learning_rate', current_lr, global_step)
+                        writer.add_scalar('var average', var_sum.item()/var_cnt, global_step)
+                        depth_gt = torch.where(depth_gt < 1e-3, depth_gt * 0 + 1e3, depth_gt)
+                        for i in range(num_log_images):
+                            writer.add_image('depth_gt/image/{}'.format(i), normalize_result(1/depth_gt[i, :, :, :].data), global_step)
+                            writer.add_image('depth_est/image/{}'.format(i), normalize_result(1/depth_est[i, :, :, :].data), global_step)
+                            writer.add_image('reduc1x1/image/{}'.format(i), normalize_result(1/reduc1x1[i, :, :, :].data), global_step)
+                            writer.add_image('lpg2x2/image/{}'.format(i), normalize_result(1/lpg2x2[i, :, :, :].data), global_step)
+                            writer.add_image('lpg4x4/image/{}'.format(i), normalize_result(1/lpg4x4[i, :, :, :].data), global_step)
+                            writer.add_image('lpg8x8/image/{}'.format(i), normalize_result(1/lpg8x8[i, :, :, :].data), global_step)
+                            writer.add_image('image/image/{}'.format(i), inv_normalize(image[i, :, :, :]).data, global_step)
+                        writer.flush()
 
             if not args.do_online_eval and global_step and global_step % args.save_freq == 0:
                 if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):
@@ -544,7 +586,8 @@ def main_worker(gpu, ngpus_per_node, args):
                     eval_summary_writer.flush()
                 model.train()
                 block_print()
-                set_misc(model)
+                if args.model == 'bts':
+                    set_misc(model)
                 enable_print()
 
             model_just_loaded = False
