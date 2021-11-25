@@ -72,6 +72,7 @@ parser.add_argument('--max_depth',                 type=float, help='maximum dep
 # Log and save
 parser.add_argument('--log_directory',             type=str,   help='directory to save checkpoints and summaries', default='')
 parser.add_argument('--checkpoint_path',           type=str,   help='path to a checkpoint to load', default='')
+parser.add_argument("--ckpt_deeplabv3plus",         default=None, type=str, help="restore from checkpoint")
 parser.add_argument('--log_freq',                  type=int,   help='Logging frequency in global steps', default=100)
 parser.add_argument('--save_freq',                 type=int,   help='Checkpoint saving frequency in global steps', default=500)
 
@@ -355,7 +356,19 @@ def main_worker(gpu, ngpus_per_node, args):
         }
         model = model_map[args.model_backbone](num_classes=1, output_stride=8,pretrained_backbone=False)
         print('load deeplabv3plus as the CNN model for the depth estimation\n')
-
+        
+        if args.ckpt_deeplabv3plus is not None and os.path.isfile(args.ckpt_deeplabv3plus):
+            model_dict = model.state_dict()
+            checkpoint = torch.load(args.ckpt_deeplabv3plus)
+            state_dict = checkpoint["network"]
+            state_dict =  {k.split('_feature_blocks.0.')[1]: v for k, v in state_dict.items()}#if(k in state_dict and 'classifier.classifier.3' not in k)}
+            state_dict.popitem()
+            state_dict.popitem()
+            for k,v in state_dict.items():
+                print(k)
+            model_dict.update(state_dict)
+            model.load_state_dict(model_dict)
+            print('successfully loaded the checkpoint obow_PC ')
 
     model.train()
     if args.model == 'bts':
@@ -403,8 +416,8 @@ def main_worker(gpu, ngpus_per_node, args):
                                     ], lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
 
     model_just_loaded = False
-    if args.checkpoint_path != '':
-        if args.model == 'bts':
+    if args.model == 'bts':
+        if args.checkpoint_path != '':
             if os.path.isfile(args.checkpoint_path):
                 print("Loading checkpoint '{}'".format(args.checkpoint_path))
                 if args.gpu is None:
@@ -426,19 +439,18 @@ def main_worker(gpu, ngpus_per_node, args):
             else:
                 print("No checkpoint found at '{}'".format(args.checkpoint_path))
             model_just_loaded = True
-        else:
-            model_dict = model.state_dict()
-            checkpoint = torch.load(args.checkpoint_path)
-            state_dict = checkpoint["model_state"]
-            state_dict.popitem()
-            state_dict.popitem()
-            for k, v in state_dict.items():
-                print(k)
-            # exit()
-            model_dict.update(state_dict)
-            model.load_state_dict(model_dict)
-            print('successfully loaded the checkpoint OBoW_pretrained_deeplabv3plus_autoencoder.pth ')
-
+        #else:
+        #    model_dict = model.state_dict()
+        #    checkpoint = torch.load(args.checkpoint_path)
+        #    state_dict = checkpoint["network"]
+        #    state_dict =  {k.split('_feature_blocks.0.')[1]: v for k, v in state_dict.items()}#if(k in state_dict and 'classifier.classifier.3' not in k)}
+        #    state_dict.popitem()
+        #    state_dict.popitem()
+        #    #for k,v in state_dict.items():
+        #    #    print(k)
+        #    model_dict.update(state_dict)
+        #    model.load_state_dict(model_dict)
+        #    print('successfully loaded the checkpoint obow_PC ')
 
     if args.retrain:
         global_step = 0
