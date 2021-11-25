@@ -392,9 +392,15 @@ def main_worker(gpu, ngpus_per_node, args):
     best_eval_steps = np.zeros(9, dtype=np.int32)
 
     # Training parameters
-    optimizer = torch.optim.AdamW([{'params': model.module.encoder.parameters(), 'weight_decay': args.weight_decay},
+    if args.model == 'bts':
+        optimizer = torch.optim.AdamW([{'params': model.module.encoder.parameters(), 'weight_decay': args.weight_decay},
                                    {'params': model.module.decoder.parameters(), 'weight_decay': 0}],
                                   lr=args.learning_rate, eps=args.adam_eps)
+    else:
+        optimizer = torch.optim.SGD(params=[
+                                {'params': model.module.backbone.parameters(), 'lr': 0.1*args.learning_rate},
+                                {'params': model.module.classifier.parameters(), 'lr': args.learning_rate},
+                                    ], lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
 
     model_just_loaded = False
     if args.checkpoint_path != '':
@@ -483,7 +489,9 @@ def main_worker(gpu, ngpus_per_node, args):
             image = torch.autograd.Variable(sample_batched['image'].cuda(args.gpu, non_blocking=True))
             focal = torch.autograd.Variable(sample_batched['focal'].cuda(args.gpu, non_blocking=True))
             depth_gt = torch.autograd.Variable(sample_batched['depth'].cuda(args.gpu, non_blocking=True))
-
+            
+            #print(image.size())
+            #exit()
             if args.model == 'bts':
                 lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = model(image, focal)
             else:

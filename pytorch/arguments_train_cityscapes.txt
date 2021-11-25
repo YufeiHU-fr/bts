@@ -18,8 +18,7 @@
 --degree 2.5
 --log_directory ./models
 --model deeplabv3plus
---model_backbone "deeplabv3plus_resnet50"
---checkpoint_path './pre_models/xxx'
+--model_backbone deeplabv3plus_resnet50
 
 --log_freq 100
 --do_online_eval
