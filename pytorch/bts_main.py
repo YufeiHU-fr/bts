@@ -410,10 +410,13 @@ def main_worker(gpu, ngpus_per_node, args):
                                    {'params': model.module.decoder.parameters(), 'weight_decay': 0}],
                                   lr=args.learning_rate, eps=args.adam_eps)
     else:
-        optimizer = torch.optim.SGD(params=[
-                                {'params': model.module.backbone.parameters(), 'lr': 0.1*args.learning_rate},
-                                {'params': model.module.classifier.parameters(), 'lr': args.learning_rate},
-                                    ], lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
+        optimizer = torch.optim.AdamW([{'params': model.module.backbone.parameters(), 'weight_decay': args.weight_decay},
+                                       {'params': model.module.classifier.parameters(), 'weight_decay': 0}],
+                                      lr=args.learning_rate, eps=args.adam_eps)
+        # optimizer = torch.optim.SGD(params=[
+        #                         {'params': model.module.backbone.parameters(), 'lr': 0.1*args.learning_rate},
+        #                         {'params': model.module.classifier.parameters(), 'lr': args.learning_rate},
+        #                             ], lr=args.learning_rate, momentum=0.9, weight_decay=args.weight_decay)
 
     model_just_loaded = False
     if args.model == 'bts':
