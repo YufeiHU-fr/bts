@@ -354,7 +354,7 @@ def main_worker(gpu, ngpus_per_node, args):
             'deeplabv3_mobilenet': network.deeplabv3_mobilenet,
             'deeplabv3plus_mobilenet': network.deeplabv3plus_mobilenet
         }
-        model = model_map[args.model_backbone](num_classes=1, output_stride=8,pretrained_backbone=False)
+        model = model_map[args.model_backbone](num_classes=1, output_stride=8,pretrained_backbone=True)
         print('load deeplabv3plus as the CNN model for the depth estimation\n')
         
         if args.ckpt_deeplabv3plus is not None and os.path.isfile(args.ckpt_deeplabv3plus):
