@@ -34,6 +34,7 @@ from tqdm import tqdm
 
 from bts import BtsModel
 from bts_dataloader import *
+import network
 
 
 def convert_arg_line_to_args(arg_line):
@@ -47,6 +48,11 @@ parser = argparse.ArgumentParser(description='BTS PyTorch implementation.', from
 parser.convert_arg_line_to_args = convert_arg_line_to_args
 
 parser.add_argument('--model_name', type=str, help='model name', default='bts_nyu_v2')
+parser.add_argument('--model',      type=str,   help='deeplabv3plus or bts', default='bts')
+parser.add_argument("--model_backbone", type=str, default='deeplabv3plus_resnet50',
+        choices=['deeplabv3_resnet50',  'deeplabv3plus_resnet50',
+            'deeplabv3_resnet101', 'deeplabv3plus_resnet101',
+            'deeplabv3_mobilenet', 'deeplabv3plus_mobilenet'], help='model name')
 parser.add_argument('--encoder', type=str, help='type of encoder, vgg or desenet121_bts or densenet161_bts',
                     default='densenet161_bts')
 parser.add_argument('--data_path', type=str, help='path to the data', required=True)
@@ -87,7 +93,18 @@ def test(params):
     args.mode = 'test'
     dataloader = BtsDataLoader(args, 'test')
     
-    model = BtsModel(params=args)
+    if args.model =='bts':
+        model = BtsModel(params=args)
+    else:
+         model_map = {'deeplabv3_resnet50': network.deeplabv3_resnet50,
+                        'deeplabv3plus_resnet50': network.deeplabv3plus_resnet50,
+                        'deeplabv3_resnet101': network.deeplabv3_resnet101,
+                        'deeplabv3plus_resnet101': network.deeplabv3plus_resnet101,
+                        'deeplabv3_mobilenet': network.deeplabv3_mobilenet,
+                        'deeplabv3plus_mobilenet': network.deeplabv3plus_mobilenet
+                                                                                                 }
+         model = model_map[args.model_backbone](num_classes=1, output_stride=8,pretrained_backbone=True)
+         print('load deeplabv3plus as the CNN model for the depth estimation\n')                        
     model = torch.nn.DataParallel(model)
     
     checkpoint = torch.load(args.checkpoint_path)
@@ -117,12 +134,16 @@ def test(params):
             image = Variable(sample['image'].cuda())
             focal = Variable(sample['focal'].cuda())
             # Predict
-            lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = model(image, focal)
-            pred_depths.append(depth_est.cpu().numpy().squeeze())
-            pred_8x8s.append(lpg8x8[0].cpu().numpy().squeeze())
-            pred_4x4s.append(lpg4x4[0].cpu().numpy().squeeze())
-            pred_2x2s.append(lpg2x2[0].cpu().numpy().squeeze())
-            pred_1x1s.append(reduc1x1[0].cpu().numpy().squeeze())
+            if args.model =='bts':
+                lpg8x8, lpg4x4, lpg2x2, reduc1x1, depth_est = model(image, focal)
+                pred_depths.append(depth_est.cpu().numpy().squeeze())
+                pred_8x8s.append(lpg8x8[0].cpu().numpy().squeeze())
+                pred_4x4s.append(lpg4x4[0].cpu().numpy().squeeze())
+                pred_2x2s.append(lpg2x2[0].cpu().numpy().squeeze())
+                pred_1x1s.append(reduc1x1[0].cpu().numpy().squeeze())
+            else:
+                depth_est = model(image)
+                pred_depths.append(depth_est.cpu().numpy().squeeze())
 
     elapsed_time = time.time() - start_time
     print('Elapesed time: %s' % str(elapsed_time))
@@ -170,13 +191,16 @@ def test(params):
        #     gt_path = os.path.join(args.data_path, './' + lines[s].split()[1])
        #     gt = cv2.imread(gt_path, -1).astype(np.float32) / 1000.0  # Visualization purpose only
        #     gt[gt == 0] = np.amax(gt)
-        
-        pred_depth = pred_depths[s]
-        pred_8x8 = pred_8x8s[s]
-        pred_4x4 = pred_4x4s[s]
-        pred_2x2 = pred_2x2s[s]
-        pred_1x1 = pred_1x1s[s]
-        
+       
+        if args.model =='bts':
+            pred_depth = pred_depths[s]
+            pred_8x8 = pred_8x8s[s]
+            pred_4x4 = pred_4x4s[s]
+            pred_2x2 = pred_2x2s[s]
+            pred_1x1 = pred_1x1s[s]
+        else:
+            pred_depth = pred_depths[s]
+
         if args.dataset == 'kitti' or args.dataset == 'kitti_benchmark':
             pred_depth_scaled = pred_depth * 256.0
         elif args.dataset == 'cityscapes':
@@ -208,13 +232,14 @@ def test(params):
             else:
                 plt.imsave(filename_cmap_png, np.log10(pred_depth), cmap='Greys')
                 filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_8x8.png')
-                plt.imsave(filename_lpg_cmap_png, np.log10(pred_8x8), cmap='Greys')
-                filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_4x4.png')
-                plt.imsave(filename_lpg_cmap_png, np.log10(pred_4x4), cmap='Greys')
-                filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_2x2.png')
-                plt.imsave(filename_lpg_cmap_png, np.log10(pred_2x2), cmap='Greys')
-                filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_1x1.png')
-                plt.imsave(filename_lpg_cmap_png, np.log10(pred_1x1), cmap='Greys')
+                if args.model =='bts':
+                    plt.imsave(filename_lpg_cmap_png, np.log10(pred_8x8), cmap='Greys')
+                    filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_4x4.png')
+                    plt.imsave(filename_lpg_cmap_png, np.log10(pred_4x4), cmap='Greys')
+                    filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_2x2.png')
+                    plt.imsave(filename_lpg_cmap_png, np.log10(pred_2x2), cmap='Greys')
+                    filename_lpg_cmap_png = filename_cmap_png.replace('.png', '_1x1.png')
+                    plt.imsave(filename_lpg_cmap_png, np.log10(pred_1x1), cmap='Greys')
     
     return
 

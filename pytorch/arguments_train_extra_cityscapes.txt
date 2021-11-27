@@ -1,0 +1,33 @@
+--mode train
+--model_name bts_cityscapes_pytorch
+--encoder resnet50_bts
+--dataset cityscapes
+--data_path ../../dataset/
+--gt_path ../../dataset/
+--filenames_file ../train_test_inputs/cityscapesdepthv2_train_files_with_gt.txt
+--batch_size 4
+--num_epochs 50
+--learning_rate 0.1
+--weight_decay 1e-5
+--adam_eps 1e-3
+--num_threads 4
+--input_height 512
+--input_width 1024
+--max_depth 80
+--do_random_rotate
+--degree 2.5
+--log_directory ./models
+--model deeplabv3plus
+--model_backbone deeplabv3plus_resnet50
+--ckpt_deeplabv3plus module/feature_extractor_net_checkpoint_200_obow_deeplabv3_c256_after_upsampling_conv1by1_perfect_crop.pth.tar
+
+
+--log_freq 100
+--do_online_eval
+--eval_freq 500
+--data_path_eval ../../dataset/
+--gt_path_eval ../../dataset/
+--filenames_file_eval ../train_test_inputs/cityscapesdepthv2_val_files_with_gt.txt
+--min_depth_eval 1e-3
+--max_depth_eval 80
+--eval_summary_directory ./models/eval/

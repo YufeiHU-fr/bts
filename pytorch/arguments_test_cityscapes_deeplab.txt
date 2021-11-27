@@ -1,0 +1,12 @@
+--encoder resnet50_bts
+--data_path ../../dataset/nyu_depth_v2/official_splits/test/
+--dataset cityscapes
+--filenames_file ../train_test_inputs/cityscapesdepthv2_val_files_with_gt.txt
+--model_name bts_cityscapes_pytorch
+--checkpoint_path ./models_deeplabv3plus_train_best_obow/bts_cityscapes_pytorch/model-20500-best_rms_9.78956
+--input_height 512
+--input_width 1024
+--max_depth 80
+--save_lpg
+--model deeplabv3plus
+--model_backbone deeplabv3plus_resnet50
