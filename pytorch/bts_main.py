@@ -410,9 +410,9 @@ def main_worker(gpu, ngpus_per_node, args):
                                    {'params': model.module.decoder.parameters(), 'weight_decay': 0}],
                                   lr=args.learning_rate, eps=args.adam_eps)
     else:
-        optimizer = torch.optim.AdamW([{'params': model.module.backbone.parameters(), 'weight_decay': args.weight_decay},
-                                       {'params': model.module.classifier.parameters(), 'weight_decay': 0}],
-                                      lr=args.learning_rate, eps=args.adam_eps)
+        optimizer = torch.optim.AdamW([{'params': model.module.backbone.parameters(), 'lr': 0.1*args.learning_rate},
+                                       {'params': model.module.classifier.parameters(),'lr': args.learning_rate}],
+                                      eps=args.adam_eps,weight_decay=args.weight_decay)
         # optimizer = torch.optim.SGD(params=[
         #                         {'params': model.module.backbone.parameters(), 'lr': 0.1*args.learning_rate},
         #                         {'params': model.module.classifier.parameters(), 'lr': args.learning_rate},
@@ -547,13 +547,14 @@ def main_worker(gpu, ngpus_per_node, args):
                 print_string = 'GPU: {} | examples/s: {:4.2f} | loss: {:.5f} | var sum: {:.3f} avg: {:.3f} | time elapsed: {:.2f}h | time left: {:.2f}h'
                 print(print_string.format(args.gpu, examples_per_sec, loss, var_sum.item(), var_sum.item()/var_cnt, time_sofar, training_time_left))
 
-                if args.model == 'bts':
-                    if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                                                                and args.rank % ngpus_per_node == 0):
-                        writer.add_scalar('silog_loss', loss, global_step)
-                        writer.add_scalar('learning_rate', current_lr, global_step)
-                        writer.add_scalar('var average', var_sum.item()/var_cnt, global_step)
-                        depth_gt = torch.where(depth_gt < 1e-3, depth_gt * 0 + 1e3, depth_gt)
+
+                if not args.multiprocessing_distributed or (args.multiprocessing_distributed
+                                                            and args.rank % ngpus_per_node == 0):
+                    writer.add_scalar('silog_loss', loss, global_step)
+                    writer.add_scalar('learning_rate', current_lr, global_step)
+                    writer.add_scalar('var average', var_sum.item()/var_cnt, global_step)
+                    depth_gt = torch.where(depth_gt < 1e-3, depth_gt * 0 + 1e3, depth_gt)
+                    if args.model == 'bts':
                         for i in range(num_log_images):
                             writer.add_image('depth_gt/image/{}'.format(i), normalize_result(1/depth_gt[i, :, :, :].data), global_step)
                             writer.add_image('depth_est/image/{}'.format(i), normalize_result(1/depth_est[i, :, :, :].data), global_step)
@@ -562,7 +563,7 @@ def main_worker(gpu, ngpus_per_node, args):
                             writer.add_image('lpg4x4/image/{}'.format(i), normalize_result(1/lpg4x4[i, :, :, :].data), global_step)
                             writer.add_image('lpg8x8/image/{}'.format(i), normalize_result(1/lpg8x8[i, :, :, :].data), global_step)
                             writer.add_image('image/image/{}'.format(i), inv_normalize(image[i, :, :, :]).data, global_step)
-                        writer.flush()
+                    writer.flush()
 
             if not args.do_online_eval and global_step and global_step % args.save_freq == 0:
                 if not args.multiprocessing_distributed or (args.multiprocessing_distributed and args.rank % ngpus_per_node == 0):

@@ -25,9 +25,97 @@ import random
 import cv2
 import sys
 import json
+import PIL
+import warnings
 
 from distributed_sampler_no_evenly_divisible import *
 
+def cutout(img, i, j, h, w, v, inplace=False):
+    """ Erase the CV Image with given value.
+    Args:
+        img (Tensor Image): Tensor image of size (C, H, W) to be erased
+        i (int): i in (i,j) i.e coordinates of the upper left corner.
+        j (int): j in (i,j) i.e coordinates of the upper left corner.
+        h (int): Height of the erased region.
+        w (int): Width of the erased region.
+        v: Erasing value.
+        inplace(bool, optional): For in-place operations. By default is set False.
+    Returns:
+        CV Image: Cutout image.
+    """
+    if not _is_numpy_image(img):
+        raise TypeError('img should be CV Image. Got {}'.format(type(img)))
+
+    if not inplace:
+        img = img.copy()
+
+    img[i:i + h, j:j + w, :] = v
+    return img
+
+class Cutout(object):
+    """Random erase the given CV Image.
+    It has been proposed in
+    `Improved Regularization of Convolutional Neural Networks with Cutout`.
+    `https://arxiv.org/pdf/1708.04552.pdf`
+    Arguments:
+        p (float): probability of the image being perspectively transformed. Default value is 0.5
+        scale: range of proportion of erased area against input image.
+        ratio: range of aspect ratio of erased area.
+        pixel_level (bool): filling one number or not. Default value is False
+    """
+    def __init__(self, p=0.5, scale=(0.02, 0.4), ratio=(0.4, 1 / 0.4), value=(0, 255), pixel_level=False, inplace=False):
+
+        if (scale[0] > scale[1]) or (ratio[0] > ratio[1]):
+            warnings.warn("range should be of kind (min, max)")
+        if scale[0] < 0 or scale[1] > 1:
+            raise ValueError("range of scale should be between 0 and 1")
+        if p < 0 or p > 1:
+            raise ValueError("range of random erasing probability should be between 0 and 1")
+        self.p = p
+        self.scale = scale
+        self.ratio = ratio
+        self.value = value
+        self.pixel_level = pixel_level
+        self.inplace = inplace
+
+    @staticmethod
+    def get_params(img, scale, ratio):
+        if type(img) == np.ndarray:
+            img_h, img_w, img_c = img.shape
+        else:
+            img_h, img_w = img.size
+            img_c = len(img.getbands())
+
+        s = random.uniform(*scale)
+        # if you img_h != img_w you may need this.
+        # r_1 = max(r_1, (img_h*s)/img_w)
+        # r_2 = min(r_2, img_h / (img_w*s))
+        r = random.uniform(*ratio)
+        s = s * img_h * img_w
+        w = int(math.sqrt(s / r))
+        h = int(math.sqrt(s * r))
+        left = random.randint(0, img_w - w)
+        top = random.randint(0, img_h - h)
+
+        return left, top, h, w, img_c
+
+    def __call__(self, img):
+        if random.random() < self.p:
+            left, top, h, w, ch = self.get_params(img, self.scale, self.ratio)
+
+            if self.pixel_level:
+                c = np.random.randint(*self.value, size=(h, w, ch), dtype='uint8')
+            else:
+                c = random.randint(*self.value)
+
+            if type(img) == np.ndarray:
+                return cutout(img, top, left, h, w, c, self.inplace)
+            else:
+                if self.pixel_level:
+                    c = PIL.Image.fromarray(c)
+                img.paste(c, (left, top, left + w, top + h))
+                return img
+        return img
 
 def _is_pil_image(img):
     return isinstance(img, Image.Image)
@@ -80,7 +168,7 @@ class BtsDataLoader(object):
             
             
 class DataLoadPreprocess(Dataset):
-    def __init__(self, args, mode, transform=None, is_for_online_eval=False):
+    def __init__(self, args, mode,cutout_=True, transform=None, is_for_online_eval=False):
         self.args = args
         if mode == 'online_eval':
             with open(args.filenames_file_eval, 'r') as f:
@@ -93,6 +181,7 @@ class DataLoadPreprocess(Dataset):
         self.transform = transform
         self.to_tensor = ToTensor
         self.is_for_online_eval = is_for_online_eval
+        self.cutout=cutout_
     
     def __getitem__(self, idx):
         sample_path = self.filenames[idx]
@@ -261,7 +350,13 @@ class DataLoadPreprocess(Dataset):
         do_augment = random.random()
         if do_augment > 0.5:
             image = self.augment_image(image)
-    
+
+        if self.cutout:
+            img_h, img_w, img_c = image.shape
+            left = random.randint(0, img_w - 64)
+            top = random.randint(0, img_h - 64)
+            image = cutout(image, top, left, 64, 64, 0)
+            depth_gt = cutout(depth_gt, top, left, 64, 64, 0)
         return image, depth_gt
     
     def augment_image(self, image):
