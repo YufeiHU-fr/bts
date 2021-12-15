@@ -3,7 +3,7 @@
 --dataset cityscapes
 --filenames_file ../train_test_inputs/cityscapesdepthv2_val_files_with_gt.txt
 --model_name bts_cityscapes_pytorch
---checkpoint_path ./models/bts_cityscapes_pytorch/model-88500-best_rms_6.86678
+--checkpoint_path ./models_deeplabv3plus_train_extra_best_obow_p11/bts_cityscapes_pytorch/model-169000-best_rms_7.55890
 --input_height 512
 --input_width 1024
 --max_depth 80
