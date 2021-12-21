@@ -357,6 +357,7 @@ class DataLoadPreprocess(Dataset):
             top = random.randint(0, img_h - 64)
             image = cutout(image, top, left, 64, 64, 0)
             depth_gt = cutout(depth_gt, top, left, 64, 64, 0)
+            #print('cutout!')
         return image, depth_gt
     
     def augment_image(self, image):

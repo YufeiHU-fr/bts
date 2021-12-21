@@ -360,15 +360,27 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.ckpt_deeplabv3plus is not None and os.path.isfile(args.ckpt_deeplabv3plus):
             model_dict = model.state_dict()
             checkpoint = torch.load(args.ckpt_deeplabv3plus)
-            state_dict = checkpoint["network"]
-            state_dict =  {k.split('_feature_blocks.0.')[1]: v for k, v in state_dict.items()}#if(k in state_dict and 'classifier.classifier.3' not in k)}
+            state_dict = checkpoint["model_state"]
             state_dict.popitem()
             state_dict.popitem()
             for k,v in state_dict.items():
                 print(k)
             model_dict.update(state_dict)
             model.load_state_dict(model_dict)
-            print('successfully loaded the checkpoint obow_PC ')
+            print("Model restored from %s" % args.ckpt_deeplabv3plus)
+            print("train config: arguments_train_extra_cityscapes_p12")
+
+            #model_dict = model.state_dict()
+            #checkpoint = torch.load(args.ckpt_deeplabv3plus)
+            #state_dict = checkpoint["network"]
+            #state_dict =  {k.split('_feature_blocks.0.')[1]: v for k, v in state_dict.items()}#if(k in state_dict and 'classifier.classifier.3' not in k)}
+            #state_dict.popitem()
+            #state_dict.popitem()
+            #for k,v in state_dict.items():
+            #    print(k)
+            #model_dict.update(state_dict)
+            #model.load_state_dict(model_dict)
+            #print('successfully loaded the checkpoint obow_PC ')
 
     model.train()
     if args.model == 'bts':
